@@ -24,8 +24,9 @@ import re
 
 Genres = ['Blues', 'Classical', 'Country', 'Disco', 'HipHop',
           'Jazz', 'Metal', 'Pop', 'Reggae', 'Rock']
-Types = ["神的愛", "禱告", "讚美", "相交相愛", "仰賴神", "盼望應許", "默想神恩", "奉獻"]
+#Types = ["神的愛", "禱告", "讚美", "相交相愛", "仰賴神", "盼望應許", "默想神恩", "奉獻"]
 Types2 = ["讚美", "爭戰", "宣告", "醫治", "仰望", "尋求", "信靠", "悔改", "感恩", "奉獻"]
+ImgList = ["jesus-4779545_1920.jpg","jesus-4779546_1920.jpg","jesus-4779544_1920.jpg","jesus-4779549_1920.jpg","jesus-4779542_1920.jpg","jesus-3754861_1280.png","jesus-4779545_1920.jpg","jesus-5382512_1920.jpg","jesus-4929681_1920.jpg","jesus-4779548_1920.jpg"]
 praise = "祂,他,偉大,慶賀,揚聲,歡呼,讚美,快樂,歌頌,稱頌,奇妙,歌唱,喜樂,全知,全能,興起,哈利路,榮耀,跳舞,拍手,跳躍,歡欣,喜悅"
 thanksgiving = "你,祢,禰,獻上,感恩,感謝,真好,在一起,降臨,感謝,謝謝,預備,春雨,恩友,全然,真諦,約定"
 worship = "我,耶和華,敬拜,切慕,同在,異象,永活,寶座,聖潔,羔羊,賜我,聖名,平安,屈膝,降臨,配得,尊榮,觸動,尊崇,尊貴,榮耀,仰望,恩典,渴慕"
@@ -98,7 +99,7 @@ def my_api(request):
 
 
     fs = FileSystemStorage()
-    file_path = fs.save('app_music_classification_api/static/song.mp3', music)
+    file_path = fs.save('app_music_classification_api/static/media/song.mp3', music)
 
     song, sr = librosa.load(file_path, sr=22050, duration=5.0)
 
@@ -133,6 +134,7 @@ def my_api(request):
     response['bpm'] = str(data[12])
     response['tone'] = get_likely_tone(data)
     response['media_url'] = request.POST["media_url"].strip()
+    file_path = file_path.replace("app_music_classification_api","163.18.42.232:8000")
     response['path'] = file_path
     response['nlp_psg'] = psgDict
     response = JsonResponse(response)
@@ -142,7 +144,7 @@ def my_api(request):
 
 
 @csrf_exempt
-def new_dataset(request):
+def new_train_data(request):
 
     dataset_numpy = None
     music = request.FILES["upload_music"]
@@ -213,6 +215,30 @@ def get_types(request):
                             'ensure_ascii': False})
     response['Access-Control-Allow-Origin'] = "*"
 
+    return response
+
+
+@csrf_exempt
+def types_img(request):
+    jsonData = {}
+    
+    for i in range(len(Types2)):
+        jsonData[str(i)] = {"info":Types2[i], "image":"http://163.18.42.232:8000/static/img/"+ImgList[i]}
+
+    response = JsonResponse(jsonData)
+    response['Access-Control-Allow-Origin'] = "*"
+    return response
+
+
+@csrf_exempt
+def songlist_img(request):
+    jsonData = {}
+    
+    for i in range(len(Types2)):
+        jsonData[str(i)] = {"info":"推薦歌單 "+str(i), "image":"http://163.18.42.232:8000/static/img/"+ImgList[i]}
+
+    response = JsonResponse(jsonData)
+    response['Access-Control-Allow-Origin'] = "*"
     return response
 
 

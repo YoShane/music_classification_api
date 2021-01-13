@@ -19,6 +19,8 @@ from app_music_classification_api import views
 urlpatterns = [
     path('api', views.my_api, name='api'),
     path('get_types', views.get_types, name='get_types'),
-    path('add', views.new_dataset, name='new_dataset'),
+    path('types_img', views.types_img, name='types_img'),
+    path('songlist_img', views.songlist_img, name='songlist_img'),
+    path('add', views.new_train_data, name='new_train_data'),
     path('download', views.dataset_download, name='dataset_download'),
 ]
