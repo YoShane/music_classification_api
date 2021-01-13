@@ -125,19 +125,35 @@ def my_api(request):
 
     else:
         pCount, tCount, wCount, fCount = 0, 0, 0, 0
+        sentiments = -1
 
 
-    response = {}
-    response['song_name'] = request.POST["song_name"].strip()
-    response['type'] = get_genre([data])
-    response['singer'] = request.POST["singer"].strip()
-    response['bpm'] = str(data[12])
-    response['tone'] = get_likely_tone(data)
-    response['media_url'] = request.POST["media_url"].strip()
+    musicData = pandas.DataFrame(
+        [data], columns=Feature_Names)  # 基本歌曲特徵
+    musicData["genre"] = get_genre([data])  # 取得曲風
+    musicData["praiseKeyWord"] = pCount
+    musicData["thanksgivingKeyWord"] = tCount
+    musicData["worshipKeyWord"] = wCount
+    musicData["feekbackKeyWord"] = fCount
+    musicData["sentiments"] = sentiments
+    for i in range(len(psgVal)):
+        musicData[psgKey[i]] = psgVal[i]
+
+    # musicData.to_csv("show_upload_data.csv", mode="a",
+    #                       index=False, header=True, encoding='utf_8_sig')
+
+    jsonData = {}
+    jsonData['song_name'] = request.POST["song_name"].strip()
+    jsonData['type'] = get_music_type(numpy.array(musicData))
+    jsonData['singer'] = request.POST["singer"].strip()
+    jsonData['bpm'] = str(data[12])
+    jsonData['tone'] = get_likely_tone(data)
+    jsonData['media_url'] = request.POST["media_url"].strip()
     file_path = file_path.replace("app_music_classification_api","163.18.42.232:8000")
-    response['path'] = file_path
-    response['nlp_psg'] = psgDict
-    response = JsonResponse(response)
+    jsonData['path'] = file_path
+    jsonData['nlp_psg'] = psgDict
+    print(jsonData)
+    response = JsonResponse(jsonData)
     response['Access-Control-Allow-Origin'] = "*"
 
     return response
@@ -338,6 +354,7 @@ def count_keyword(text):
 
 
 def nlpProcess(text):
+
     result = []
     tempDel = []
     psgRes = {"nList":[],"vList":[],"aList":[],"anList":[],"vnList":[],"nsList":[]}
@@ -382,3 +399,17 @@ def nlpProcess(text):
                     psgRes["nsList"].append(word)
 
     return newText,sentimentsRes,psgRes
+
+
+def get_music_type(data_x):
+
+    # Scale ALL Variables Between -1 to 1
+    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=(-1, 1))
+    data_x = scaler.fit_transform(data_x)
+
+    # Predict Genres
+    svm = joblib.load('music_model/model_music_classification.pkl')
+    predicts = svm.predict(data_x)
+    print(predicts)
+
+    return str(predicts[0])
