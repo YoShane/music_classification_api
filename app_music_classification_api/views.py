@@ -13,7 +13,8 @@ import pandas
 import librosa
 import numpy
 import joblib
-import sklearn
+from sklearn import preprocessing
+from sklearn.svm import SVC
 from music_model.Utilities import extract_features
 from snownlp import SnowNLP #文本分析
 from collections import Counter
@@ -84,6 +85,8 @@ Feature_Names = ['meanSpecCentroid', 'stdSpecCentroid',
                     'meanTonnetz_06', 'stdTonnetz_06'
                  ]
 
+datasetsForFit = numpy.load('music_model/classification_dataset.npy',allow_pickle = True)
+datasetsGenreForFit = numpy.load('music_model/genre_dataset.npy',allow_pickle = True)
 
 @csrf_exempt
 def my_api(request):
@@ -104,8 +107,7 @@ def my_api(request):
     song, sr = librosa.load(file_path, sr=22050, duration=5.0)
 
     # Extract Features of Test Files and Save Them in Array
-    data = numpy.array(extract_features(song))
-
+    data_features = numpy.array(extract_features(song))
 
     if(len(lyrics) != 0):
         lyrics = re.sub('[a-zA-Z0-9’!"#$%&\'()*+,-./:;<=>﹥?@，。?★、…【】《》？“”‘’！[\\]^_`{|}~]','',lyrics)
@@ -128,9 +130,10 @@ def my_api(request):
         sentiments = -1
 
 
+    genreType = int(get_genre([data_features]))
     musicData = pandas.DataFrame(
-        [data], columns=Feature_Names)  # 基本歌曲特徵
-    musicData["genre"] = get_genre([data])  # 取得曲風
+        [data_features], columns=Feature_Names)  # 基本歌曲特徵
+    musicData["genre"] = genreType  # 取得曲風
     musicData["praiseKeyWord"] = pCount
     musicData["thanksgivingKeyWord"] = tCount
     musicData["worshipKeyWord"] = wCount
@@ -144,12 +147,13 @@ def my_api(request):
 
     jsonData = {}
     jsonData['song_name'] = request.POST["song_name"].strip()
-    jsonData['type'] = get_music_type(numpy.array(musicData))
+    jsonData['type'] = get_music_type(musicData)
+    jsonData['genre'] = Genres[genreType]
     jsonData['singer'] = request.POST["singer"].strip()
-    jsonData['bpm'] = str(data[12])
-    jsonData['tone'] = get_likely_tone(data)
+    jsonData['bpm'] = str(data_features[12])
+    jsonData['tone'] = get_likely_tone(data_features)
     jsonData['media_url'] = request.POST["media_url"].strip()
-    file_path = file_path.replace("app_music_classification_api","163.18.42.232:8000")
+    file_path = file_path.replace("app_music_classification_api","http://163.18.42.232:8000")
     jsonData['path'] = file_path
     jsonData['nlp_psg'] = psgDict
     print(jsonData)
@@ -284,12 +288,17 @@ def dataset_download(request):
 
 def get_genre(data):
     # Scale ALL Variables Between -1 to 1
-    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=(-1, 1))
-    data = scaler.fit_transform(data)
+    scaler = preprocessing.MinMaxScaler(feature_range=(-1, 1))
+    # fit transform on training data
+    scaler.fit(datasetsGenreForFit)
+    # transform training data
+    data_X = scaler.transform(data)
+    #print(data_X)
 
     # Predict Genres
     svm = joblib.load('music_model/genre_model.pkl')
-    predicts = svm.predict(data)
+    predicts = svm.predict(data_X)
+
 
     print(predicts)
     return str(Genres.index(str(predicts[0])))
@@ -401,15 +410,17 @@ def nlpProcess(text):
     return newText,sentimentsRes,psgRes
 
 
-def get_music_type(data_x):
+def get_music_type(data):
 
-    # Scale ALL Variables Between -1 to 1
-    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=(-1, 1))
-    data_x = scaler.fit_transform(data_x)
+    scaler = preprocessing.MaxAbsScaler()
+    # fit transform on training data
+    scaler.fit(datasetsForFit)
+    # transform training data
+    data_X = scaler.transform(data)
+    #print(data_X)
 
     # Predict Genres
     svm = joblib.load('music_model/model_music_classification.pkl')
-    predicts = svm.predict(data_x)
-    print(predicts)
+    predicts = svm.predict(data_X)
 
     return str(predicts[0])
