@@ -22,7 +22,6 @@ import jieba
 import jieba.posseg as psg
 import re
 
-
 Genres = ['Blues', 'Classical', 'Country', 'Disco', 'HipHop',
           'Jazz', 'Metal', 'Pop', 'Reggae', 'Rock']
 #Types = ["神的愛", "禱告", "讚美", "相交相愛", "仰賴神", "盼望應許", "默想神恩", "奉獻"]
