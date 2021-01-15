@@ -28,6 +28,7 @@ Genres = ['Blues', 'Classical', 'Country', 'Disco', 'HipHop',
 #Types = ["神的愛", "禱告", "讚美", "相交相愛", "仰賴神", "盼望應許", "默想神恩", "奉獻"]
 Types2 = ["讚美", "爭戰", "宣告", "醫治", "仰望", "尋求", "信靠", "悔改", "感恩", "奉獻"]
 ImgList = ["jesus-4779545_1920.jpg","jesus-4779546_1920.jpg","jesus-4779544_1920.jpg","jesus-4779549_1920.jpg","jesus-4779542_1920.jpg","jesus-3754861_1280.png","jesus-4779545_1920.jpg","jesus-5382512_1920.jpg","jesus-4929681_1920.jpg","jesus-4779548_1920.jpg"]
+ImgRecList = ["平靜.jpg","鄉村.jpg","FIGHT_FOR_LOVE.jpg","500x500.jpg","勵志.jpg","images.png"]
 praise = "祂,他,偉大,慶賀,揚聲,歡呼,讚美,快樂,歌頌,稱頌,奇妙,歌唱,喜樂,全知,全能,興起,哈利路,榮耀,跳舞,拍手,跳躍,歡欣,喜悅"
 thanksgiving = "你,祢,禰,獻上,感恩,感謝,真好,在一起,降臨,感謝,謝謝,預備,春雨,恩友,全然,真諦,約定"
 worship = "我,耶和華,敬拜,切慕,同在,異象,永活,寶座,聖潔,羔羊,賜我,聖名,平安,屈膝,降臨,配得,尊榮,觸動,尊崇,尊貴,榮耀,仰望,恩典,渴慕"
@@ -91,29 +92,113 @@ datasetsGenreForFit = numpy.load('music_model/genre_dataset.npy',allow_pickle = 
 @csrf_exempt
 def my_api(request):
 
-    # 上傳過來的檔案存放於記憶體中
-    # <class 'django.core.files.uploadedfile.InMemoryUploadedFile'>
-    music = request.FILES["upload_music"]
+    try:
+        # 上傳過來的檔案存放於記憶體中
+        # <class 'django.core.files.uploadedfile.InMemoryUploadedFile'>
+        music = request.FILES["upload_music"]
 
-    if 'lyrics' not in request.POST:
-        lyrics = ""
-    else:
+        if 'lyrics' not in request.POST:
+            lyrics = ""
+        else:
+            lyrics = request.POST["lyrics"].strip()
+
+
+        fs = FileSystemStorage()
+        file_path = fs.save('app_music_classification_api/static/media/song.mp3', music)
+        #print(file_path)
+        song, sr = librosa.load(file_path, sr=22050, duration=5.0)
+
+        # Extract Features of Test Files and Save Them in Array
+        data_features = numpy.array(extract_features(song))
+
+        if(len(lyrics) != 0):
+            lyrics = re.sub('[a-zA-Z0-9’!"#$%&\'()*+,-./:;<=>﹥?@，。?★、…【】《》？“”‘’！[\\]^_`{|}~]','',lyrics)
+            # 歌詞關鍵字統計
+            newLyrics,sentiments,psgDict = nlpProcess(lyrics) #nlp分析
+            pCount, tCount, wCount, fCount = count_keyword(newLyrics)
+
+            #詞性數量輸入(比例)
+            psgKey = list(psgDict.keys())
+            psgVal = []
+            psgCount = 0
+            for i in psgKey:
+                psgVal.append(len(psgDict[i])) 
+                psgCount = psgCount + len(psgDict[i])
+            for i in range(len(psgVal)):
+                psgVal[i] = psgVal[i]/psgCount
+
+        else:
+            pCount, tCount, wCount, fCount = 0, 0, 0, 0
+            sentiments = -1
+
+
+        genreType = int(get_genre([data_features]))
+        musicData = pandas.DataFrame(
+            [data_features], columns=Feature_Names)  # 基本歌曲特徵
+        musicData["genre"] = genreType  # 取得曲風
+        musicData["praiseKeyWord"] = pCount
+        musicData["thanksgivingKeyWord"] = tCount
+        musicData["worshipKeyWord"] = wCount
+        musicData["feekbackKeyWord"] = fCount
+        musicData["sentiments"] = sentiments
+        for i in range(len(psgVal)):
+            musicData[psgKey[i]] = psgVal[i]
+
+        # musicData.to_csv("show_upload_data.csv", mode="a",
+        #                       index=False, header=True, encoding='utf_8_sig')
+
+        jsonData = {}
+        jsonData['song_name'] = request.POST["song_name"].strip()
+        jsonData['type'] = get_music_type(musicData)
+        jsonData['genre'] = Genres[genreType]
+        jsonData['singer'] = request.POST["singer"].strip()
+        jsonData['bpm'] = str(data_features[12])
+        jsonData['tone'] = get_likely_tone(data_features)
+        jsonData['media_url'] = request.POST["media_url"].strip()
+        file_path = file_path.replace("app_music_classification_api","http://163.18.42.232:8000")
+        jsonData['path'] = file_path
+        jsonData['nlp_psg'] = psgDict
+        jsonData['status'] = 'Done'
+        print(jsonData)
+        response = JsonResponse(jsonData)
+        response['Access-Control-Allow-Origin'] = "*"
+
+        return response
+
+    except:
+        response = JsonResponse({"Status": "Error"})
+        response['Access-Control-Allow-Origin'] = "*"
+
+        return response
+
+
+@csrf_exempt
+def new_train_data(request):
+
+    try:
+        dataset_numpy = None
+        music = request.FILES["upload_music"]
+        fs = FileSystemStorage()
+        file_path = fs.save('media/train_music/song.mp3', music)
+
+        signal, sr = librosa.load(file_path, sr=22050, duration=5.0)
+        dataset_numpy = numpy.array(extract_features(signal))
+
+        dataset_pandas = pandas.DataFrame(
+            [dataset_numpy], columns=Feature_Names)  # 基本歌曲特徵
+        dataset_pandas["genre"] = get_genre([dataset_numpy])  # 取得曲風
+
         lyrics = request.POST["lyrics"].strip()
-
-
-    fs = FileSystemStorage()
-    file_path = fs.save('app_music_classification_api/static/media/song.mp3', music)
-
-    song, sr = librosa.load(file_path, sr=22050, duration=5.0)
-
-    # Extract Features of Test Files and Save Them in Array
-    data_features = numpy.array(extract_features(song))
-
-    if(len(lyrics) != 0):
         lyrics = re.sub('[a-zA-Z0-9’!"#$%&\'()*+,-./:;<=>﹥?@，。?★、…【】《》？“”‘’！[\\]^_`{|}~]','',lyrics)
-         # 歌詞關鍵字統計
+        # 歌詞關鍵字統計
         newLyrics,sentiments,psgDict = nlpProcess(lyrics) #nlp分析
+
         pCount, tCount, wCount, fCount = count_keyword(newLyrics)
+        dataset_pandas["praiseKeyWord"] = pCount
+        dataset_pandas["thanksgivingKeyWord"] = tCount
+        dataset_pandas["worshipKeyWord"] = wCount
+        dataset_pandas["feekbackKeyWord"] = fCount
+        dataset_pandas["sentiments"] = sentiments
 
         #詞性數量輸入(比例)
         psgKey = list(psgDict.keys())
@@ -123,104 +208,33 @@ def my_api(request):
             psgVal.append(len(psgDict[i])) 
             psgCount = psgCount + len(psgDict[i])
         for i in range(len(psgVal)):
-            psgVal[i] = psgVal[i]/psgCount
+            dataset_pandas[psgKey[i]] = psgVal[i]/psgCount
 
-    else:
-        pCount, tCount, wCount, fCount = 0, 0, 0, 0
-        sentiments = -1
+        # 新增客製類型
+        dataset_pandas["type"] = Types2[int(request.POST["type_value"])]
+        dataset_pandas["file_path"] = file_path
 
+        # 新增歌名
+        dataset_pandas["song_name"] = request.POST["song_name"].strip()
 
-    genreType = int(get_genre([data_features]))
-    musicData = pandas.DataFrame(
-        [data_features], columns=Feature_Names)  # 基本歌曲特徵
-    musicData["genre"] = genreType  # 取得曲風
-    musicData["praiseKeyWord"] = pCount
-    musicData["thanksgivingKeyWord"] = tCount
-    musicData["worshipKeyWord"] = wCount
-    musicData["feekbackKeyWord"] = fCount
-    musicData["sentiments"] = sentiments
-    for i in range(len(psgVal)):
-        musicData[psgKey[i]] = psgVal[i]
+        # 新增時間
+        now = datetime.datetime.now()
+        dataset_pandas["upload_time"] = now.strftime(
+            "%Y-%m-%d %H:%M:%S")  # 轉換為指定的格式
+        dataset_pandas["lyrics"] = lyrics  # 歌詞(往後可能更新)
 
-    # musicData.to_csv("show_upload_data.csv", mode="a",
-    #                       index=False, header=True, encoding='utf_8_sig')
+        dataset_pandas.to_csv("orig_datasets.csv", mode="a",
+                            index=False, header=False, encoding='utf_8_sig')
 
-    jsonData = {}
-    jsonData['song_name'] = request.POST["song_name"].strip()
-    jsonData['type'] = get_music_type(musicData)
-    jsonData['genre'] = Genres[genreType]
-    jsonData['singer'] = request.POST["singer"].strip()
-    jsonData['bpm'] = str(data_features[12])
-    jsonData['tone'] = get_likely_tone(data_features)
-    jsonData['media_url'] = request.POST["media_url"].strip()
-    file_path = file_path.replace("app_music_classification_api","http://163.18.42.232:8000")
-    jsonData['path'] = file_path
-    jsonData['nlp_psg'] = psgDict
-    print(jsonData)
-    response = JsonResponse(jsonData)
-    response['Access-Control-Allow-Origin'] = "*"
+        response = JsonResponse({"Status": "Done"})
+        response['Access-Control-Allow-Origin'] = "*"
 
-    return response
+        return response
+    except:
+        response = JsonResponse({"Status": "Error"})
+        response['Access-Control-Allow-Origin'] = "*"
 
-
-@csrf_exempt
-def new_train_data(request):
-
-    dataset_numpy = None
-    music = request.FILES["upload_music"]
-    fs = FileSystemStorage()
-    file_path = fs.save('media/train_music/song.mp3', music)
-
-    signal, sr = librosa.load(file_path, sr=22050, duration=5.0)
-    dataset_numpy = numpy.array(extract_features(signal))
-
-    dataset_pandas = pandas.DataFrame(
-        [dataset_numpy], columns=Feature_Names)  # 基本歌曲特徵
-    dataset_pandas["genre"] = get_genre([dataset_numpy])  # 取得曲風
-
-    lyrics = request.POST["lyrics"].strip()
-    lyrics = re.sub('[a-zA-Z0-9’!"#$%&\'()*+,-./:;<=>﹥?@，。?★、…【】《》？“”‘’！[\\]^_`{|}~]','',lyrics)
-    # 歌詞關鍵字統計
-    newLyrics,sentiments,psgDict = nlpProcess(lyrics) #nlp分析
-
-    pCount, tCount, wCount, fCount = count_keyword(newLyrics)
-    dataset_pandas["praiseKeyWord"] = pCount
-    dataset_pandas["thanksgivingKeyWord"] = tCount
-    dataset_pandas["worshipKeyWord"] = wCount
-    dataset_pandas["feekbackKeyWord"] = fCount
-    dataset_pandas["sentiments"] = sentiments
-
-    #詞性數量輸入(比例)
-    psgKey = list(psgDict.keys())
-    psgVal = []
-    psgCount = 0
-    for i in psgKey:
-        psgVal.append(len(psgDict[i])) 
-        psgCount = psgCount + len(psgDict[i])
-    for i in range(len(psgVal)):
-        dataset_pandas[psgKey[i]] = psgVal[i]/psgCount
-
-    # 新增客製類型
-    dataset_pandas["type"] = Types2[int(request.POST["type_value"])]
-    dataset_pandas["file_path"] = file_path
-
-    # 新增歌名
-    dataset_pandas["song_name"] = request.POST["song_name"].strip()
-
-    # 新增時間
-    now = datetime.datetime.now()
-    dataset_pandas["upload_time"] = now.strftime(
-        "%Y-%m-%d %H:%M:%S")  # 轉換為指定的格式
-    dataset_pandas["lyrics"] = lyrics  # 歌詞(往後可能更新)
-
-    dataset_pandas.to_csv("orig_datasets.csv", mode="a",
-                          index=False, header=False, encoding='utf_8_sig')
-
-    response = JsonResponse({"Status": "Done"})
-    response['Access-Control-Allow-Origin'] = "*"
-
-    return response
-
+        return response
 
 @csrf_exempt
 def get_types(request):
@@ -254,8 +268,8 @@ def types_img(request):
 def songlist_img(request):
     jsonData = {}
     
-    for i in range(len(Types2)):
-        jsonData[str(i)] = {"info":"推薦歌單 "+str(i), "image":"http://163.18.42.232:8000/static/img/"+ImgList[i]}
+    for i in range(len(ImgRecList)):
+        jsonData[str(i)] = {"info":"推薦歌單 "+str(i+1), "image":"http://163.18.42.232:8000/static/img/"+ImgRecList[i]}
 
     response = JsonResponse(jsonData)
     response['Access-Control-Allow-Origin'] = "*"
