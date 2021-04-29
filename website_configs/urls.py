@@ -23,4 +23,5 @@ urlpatterns = [
     path('songlist_img', views.songlist_img, name='songlist_img'),
     path('add_train_data', views.new_train_data, name='new_train_data'),
     path('dataset_download', views.dataset_download, name='dataset_download'),
+    path('play', views.musicReturn, name='play'),
 ]

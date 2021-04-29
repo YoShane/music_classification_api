@@ -8,6 +8,8 @@ from io import BytesIO
 import os
 import datetime
 from django.http import JsonResponse
+from ranged_response import RangedFileResponse
+from user_agents import parse
 
 import pandas
 import librosa
@@ -21,6 +23,9 @@ from collections import Counter
 import jieba
 import jieba.posseg as psg
 import re
+import json
+import pymongo
+
 
 Genres = ['Blues', 'Classical', 'Country', 'Disco', 'HipHop',
           'Jazz', 'Metal', 'Pop', 'Reggae', 'Rock']
@@ -437,3 +442,29 @@ def get_music_type(data):
     predicts = svm.predict(data_X)
 
     return str(predicts[0])
+
+@csrf_exempt
+def musicReturn(request):
+   
+    name = request.GET.get('filename',default='')
+    if(name != ''):
+    
+        user_agent = parse(request.META.get('HTTP_USER_AGENT', ''))
+        try:
+            if(user_agent.browser.family.find('Chrome')!=-1):
+                response = RangedFileResponse(request, open('app_music_classification_api/static/' + name, 'rb'), content_type='audio/mpeg')
+                response['Content-Disposition'] = 'attachment; filename="%s"' % name
+                return response
+            else:
+                file = open('app_music_classification_api/static/' + name, 'rb').read() 
+                response = HttpResponse(file, content_type="audio/mpeg") 
+                response['Content-Disposition'] = 'attachment; filename="%s"' % name
+                return response
+        except:
+            response = JsonResponse({"Status": "Can't read file."})
+            response['Access-Control-Allow-Origin'] = "*"
+            return  response
+    else:
+        response = JsonResponse({"Status": "Please put your media name in [GET]..."})
+        response['Access-Control-Allow-Origin'] = "*"
+        return  response
